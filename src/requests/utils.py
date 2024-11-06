@@ -765,7 +765,7 @@ def set_environ(env_name, value):
                 os.environ[env_name] = old_value
 
 
-def should_bypass_proxies(url, no_proxy):
+def should_bypass_proxies(url, no_proxy, trust_env=True):
     """
     Returns whether we should bypass proxies or not.
 
@@ -780,7 +780,7 @@ def should_bypass_proxies(url, no_proxy):
     # First check whether no_proxy is defined. If it is, check that the URL
     # we're getting isn't in the no_proxy list.
     no_proxy_arg = no_proxy
-    if no_proxy is None:
+    if no_proxy is None and trust_env:
         no_proxy = get_proxy("no_proxy")
     parsed = urlparse(url)
 
@@ -812,6 +812,9 @@ def should_bypass_proxies(url, no_proxy):
                     # The URL does match something in no_proxy, so we don't want
                     # to apply the proxies on this URL.
                     return True
+
+    if not trust_env:
+        return False
 
     with set_environ("no_proxy", no_proxy_arg):
         # parsed.hostname can be `None` in cases such as a file URI.
@@ -845,6 +848,13 @@ def select_proxy(url, proxies):
     :param proxies: A dictionary of schemes or schemes and hosts to proxy URLs
     """
     proxies = proxies or {}
+
+    if (
+        urlparse(url).hostname is not None and
+        should_bypass_proxies(url, proxies.get("no_proxy"), trust_env=False)
+    ):
+        return None
+
     urlparts = urlparse(url)
     if urlparts.hostname is None:
         return proxies.get(urlparts.scheme, proxies.get("all"))
